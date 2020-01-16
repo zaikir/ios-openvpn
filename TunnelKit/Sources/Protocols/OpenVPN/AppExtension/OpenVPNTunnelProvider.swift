@@ -658,7 +658,16 @@ extension OpenVPNTunnelProvider: OpenVPNSessionDelegate {
             return
         }
         
-        var dnsServers = cfg.sessionConfiguration.dnsServers ?? options.dnsServers ?? []
+        var dnsServers = [String]()
+        //First check for dnsServers from the ovpn session configuration
+        if let sessionConfigurationDnsServers = cfg.sessionConfiguration.dnsServers, !sessionConfigurationDnsServers.isEmpty {
+            dnsServers = sessionConfigurationDnsServers
+        } else {
+            //If empty, use the dnsServers provided from the tunnel
+            if let servers = options.dnsServers {
+                dnsServers = servers
+            }
+        }
 
         // fall back
         if !dnsServers.isEmpty {
