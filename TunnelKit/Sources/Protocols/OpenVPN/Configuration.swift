@@ -433,10 +433,10 @@ extension OpenVPN {
         public let randomizeEndpoint: Bool?
         
         /// - Seealso: `ConfigurationBuilder.usesPIAPatches`
-        public let usesPIAPatches: Bool?
+        public var usesPIAPatches: Bool?
         
         /// - Seealso: `ConfigurationBuilder.mtu`
-        public let mtu: Int?
+        public var mtu: Int?
 
         /// - Seealso: `ConfigurationBuilder.authToken`
         public let authToken: String?
