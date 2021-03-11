@@ -3,7 +3,7 @@
 //  TunnelKit
 //
 //  Created by Davide De Rosa on 7/6/18.
-//  Copyright (c) 2020 Davide De Rosa. All rights reserved.
+//  Copyright (c) 2021 Davide De Rosa. All rights reserved.
 //
 //  https://github.com/passepartoutvpn
 //
@@ -342,8 +342,8 @@ const NSInteger CryptoCBCMaxHMACLength = 100;
 {
     NSAssert(packet.length > 0, @"Decrypting an empty packet, how did it get this far?");
 
-    DATA_PATH_DECRYPT_INIT(packet.bytes)
-    if (packet.length < headerLength) {
+    DATA_PATH_DECRYPT_INIT(packet)
+    if (packet.length < headerLength + self.crypto.digestLength + self.crypto.cipherIVLength) {
         return NO;
     }
 

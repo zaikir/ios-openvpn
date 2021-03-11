@@ -3,7 +3,7 @@
 //  TunnelKit
 //
 //  Created by Davide De Rosa on 9/5/18.
-//  Copyright (c) 2020 Davide De Rosa. All rights reserved.
+//  Copyright (c) 2021 Davide De Rosa. All rights reserved.
 //
 //  https://github.com/passepartoutvpn
 //
@@ -42,6 +42,10 @@ extension OpenVPN {
             
             static let cipher = NSRegularExpression("^cipher +[^,\\s]+")
             
+            static let dataCiphers = NSRegularExpression("^(data-ciphers|ncp-ciphers) +[^,\\s]+(:[^,\\s]+)*")
+            
+            static let dataCiphersFallback = NSRegularExpression("^data-ciphers-fallback +[^,\\s]+")
+            
             static let auth = NSRegularExpression("^auth +[\\w\\-]+")
             
             static let compLZO = NSRegularExpression("^comp-lzo.*")
@@ -62,15 +66,17 @@ extension OpenVPN {
             
             // MARK: Client
             
-            static let proto = NSRegularExpression("^proto +(udp6?|tcp6?)")
+            static let proto = NSRegularExpression("^proto +(udp[46]?|tcp[46]?)")
             
             static let port = NSRegularExpression("^port +\\d+")
             
-            static let remote = NSRegularExpression("^remote +[^ ]+( +\\d+)?( +(udp6?|tcp6?))?")
+            static let remote = NSRegularExpression("^remote +[^ ]+( +\\d+)?( +(udp[46]?|tcp[46]?))?")
             
             static let eku = NSRegularExpression("^remote-cert-tls +server")
             
             static let remoteRandom = NSRegularExpression("^remote-random")
+            
+            static let mtu = NSRegularExpression("^tun-mtu +\\d+")
             
             // MARK: Server
             
@@ -95,6 +101,8 @@ extension OpenVPN {
             static let dns = NSRegularExpression("^dhcp-option +DNS6? +[\\d\\.a-fA-F:]+")
             
             static let domain = NSRegularExpression("^dhcp-option +DOMAIN +[^ ]+")
+            
+            static let domainSearch = NSRegularExpression("^dhcp-option +DOMAIN-SEARCH +[^ ]+")
             
             static let proxy = NSRegularExpression("^dhcp-option +PROXY_(HTTPS? +[^ ]+ +\\d+|AUTO_CONFIG_URL +[^ ]+)")
             
@@ -195,6 +203,8 @@ extension OpenVPN {
             var currentBlockName: String?
             var currentBlock: [String] = []
             
+            var optDataCiphers: [Cipher]?
+            var optDataCiphersFallback: Cipher?
             var optCipher: Cipher?
             var optDigest: Digest?
             var optCompressionFraming: CompressionFraming?
@@ -209,12 +219,12 @@ extension OpenVPN {
             var optKeepAliveTimeoutSeconds: TimeInterval?
             var optRenegotiateAfterSeconds: TimeInterval?
             //
-            var optHostname: String?
             var optDefaultProto: SocketType?
             var optDefaultPort: UInt16?
             var optRemotes: [(String, UInt16?, SocketType?)] = [] // address, port, socket
             var optChecksEKU: Bool?
             var optRandomizeEndpoint: Bool?
+            var optMTU: Int?
             //
             var optAuthToken: String?
             var optPeerId: UInt32?
@@ -226,6 +236,7 @@ extension OpenVPN {
             var optRoutes4: [(String, String, String?)] = [] // address, netmask, gateway
             var optRoutes6: [(String, UInt8, String?)] = [] // destination, prefix, gateway
             var optDNSServers: [String]?
+            var optDomain: String?
             var optSearchDomains: [String]?
             var optHTTPProxy: Proxy?
             var optHTTPSProxy: Proxy?
@@ -340,9 +351,27 @@ extension OpenVPN {
                         return
                     }
                     optCipher = Cipher(rawValue: rawValue.uppercased())
-                    if optCipher == nil {
-                        unsupportedError = ConfigurationError.unsupportedConfiguration(option: "cipher \(rawValue)")
+                }
+                Regex.dataCiphers.enumerateArguments(in: line) {
+                    isHandled = true
+                    guard let rawValue = $0.first else {
+                        return
                     }
+                    let rawCiphers = rawValue.components(separatedBy: ":")
+                    optDataCiphers = []
+                    rawCiphers.forEach {
+                        guard let cipher = Cipher(rawValue: $0.uppercased()) else {
+                            return
+                        }
+                        optDataCiphers?.append(cipher)
+                    }
+                }
+                Regex.dataCiphersFallback.enumerateArguments(in: line) {
+                    isHandled = true
+                    guard let rawValue = $0.first else {
+                        return
+                    }
+                    optDataCiphersFallback = Cipher(rawValue: rawValue.uppercased())
                 }
                 Regex.auth.enumerateArguments(in: line) {
                     isHandled = true
@@ -466,6 +495,13 @@ extension OpenVPN {
                     isHandled = true
                     optRandomizeEndpoint = true
                 }
+                Regex.mtu.enumerateArguments(in: line) {
+                    isHandled = true
+                    guard let str = $0.first else {
+                        return
+                    }
+                    optMTU = Int(str)
+                }
                 
                 // MARK: Server
                 
@@ -532,6 +568,12 @@ extension OpenVPN {
                     guard $0.count == 2 else {
                         return
                     }
+                    optDomain = $0[1]
+                }
+                Regex.domainSearch.enumerateArguments(in: line) {
+                    guard $0.count == 2 else {
+                        return
+                    }
                     if optSearchDomains == nil {
                         optSearchDomains = []
                     }
@@ -592,8 +634,8 @@ extension OpenVPN {
                 guard let _ = optCA else {
                     throw ConfigurationError.missingConfiguration(option: "ca")
                 }
-                guard let _ = optCipher else {
-                    throw ConfigurationError.missingConfiguration(option: "cipher")
+                guard optCipher != nil || !(optDataCiphers?.isEmpty ?? false) else {
+                    throw ConfigurationError.missingConfiguration(option: "cipher or data-ciphers")
                 }
             }
             
@@ -603,7 +645,8 @@ extension OpenVPN {
             
             // MARK: General
             
-            sessionBuilder.cipher = optCipher
+            sessionBuilder.cipher = optDataCiphersFallback ?? optCipher
+            sessionBuilder.dataCiphers = optDataCiphers
             sessionBuilder.digest = optDigest
             sessionBuilder.compressionFraming = optCompressionFraming
             sessionBuilder.compressionAlgorithm = optCompressionAlgorithm
@@ -669,6 +712,7 @@ extension OpenVPN {
             
             sessionBuilder.checksEKU = optChecksEKU
             sessionBuilder.randomizeEndpoint = optRandomizeEndpoint
+            sessionBuilder.mtu = optMTU
             
             // MARK: Server
             
@@ -750,6 +794,15 @@ extension OpenVPN {
                 )
             }
             
+            // prepend search domains with main domain (if set)
+            if let domain = optDomain {
+                if optSearchDomains == nil {
+                    optSearchDomains = [domain]
+                } else {
+                    optSearchDomains?.insert(domain, at: 0)
+                }
+            }
+
             sessionBuilder.dnsServers = optDNSServers
             sessionBuilder.searchDomains = optSearchDomains
             sessionBuilder.httpProxy = optHTTPProxy
@@ -818,10 +871,6 @@ private extension String {
 
 private extension SocketType {
     init?(protoString: String) {
-        var str = protoString
-        if str.hasSuffix("6") {
-            str.removeLast()
-        }
-        self.init(rawValue: str.uppercased())
+        self.init(rawValue: protoString.uppercased())
     }
 }
