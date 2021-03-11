@@ -3,7 +3,7 @@
 //  TunnelKit
 //
 //  Created by Davide De Rosa on 8/27/17.
-//  Copyright (c) 2020 Davide De Rosa. All rights reserved.
+//  Copyright (c) 2021 Davide De Rosa. All rights reserved.
 //
 //  https://github.com/passepartoutvpn
 //
@@ -45,9 +45,6 @@ public protocol LinkInterface: IOInterface {
     /// The literal address of the remote host.
     var remoteAddress: String? { get }
 
-    /// The maximum size of a packet.
-    var mtu: Int { get }
-    
     /// The number of packets that this interface is able to bufferize.
     var packetBufferSize: Int { get }
 }

@@ -3,7 +3,7 @@
 //  TunnelKit
 //
 //  Created by Davide De Rosa on 5/23/19.
-//  Copyright (c) 2020 Davide De Rosa. All rights reserved.
+//  Copyright (c) 2021 Davide De Rosa. All rights reserved.
 //
 //  https://github.com/passepartoutvpn
 //
@@ -32,9 +32,8 @@ class NETCPLink: LinkInterface {
     
     private let maxPacketSize: Int
     
-    init(impl: NWTCPConnection, mtu: Int, maxPacketSize: Int? = nil) {
+    init(impl: NWTCPConnection, maxPacketSize: Int? = nil) {
         self.impl = impl
-        self.mtu = mtu
         self.maxPacketSize = maxPacketSize ?? (512 * 1024)
     }
     
@@ -45,8 +44,6 @@ class NETCPLink: LinkInterface {
     var remoteAddress: String? {
         return (impl.remoteAddress as? NWHostEndpoint)?.hostname
     }
-    
-    let mtu: Int
     
     var packetBufferSize: Int {
         return maxPacketSize
@@ -98,7 +95,7 @@ class NETCPLink: LinkInterface {
 
 /// :nodoc:
 extension NETCPSocket: LinkProducer {
-    public func link(withMTU mtu: Int) -> LinkInterface {
-        return NETCPLink(impl: impl, mtu: mtu)
+    public func link() -> LinkInterface {
+        return NETCPLink(impl: impl)
     }
 }

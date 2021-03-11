@@ -3,7 +3,7 @@
 //  TunnelKit
 //
 //  Created by Davide De Rosa on 5/23/18.
-//  Copyright (c) 2020 Davide De Rosa. All rights reserved.
+//  Copyright (c) 2021 Davide De Rosa. All rights reserved.
 //
 //  https://github.com/passepartoutvpn
 //
@@ -40,5 +40,22 @@ import Foundation
 public extension DispatchQueue {
     func schedule(after: DispatchTimeInterval, block: @escaping () -> Void) {
         asyncAfter(deadline: .now() + after, execute: block)
+    }
+}
+
+/// :nodoc:
+func fromDictionary<T: Decodable>(_ type: T.Type, _ dictionary: [String: Any]) throws -> T {
+    let data = try JSONSerialization.data(withJSONObject: dictionary, options: .fragmentsAllowed)
+    return try JSONDecoder().decode(T.self, from: data)
+}
+
+/// :nodoc:
+public extension Encodable {
+    func asDictionary() throws -> [String: Any] {
+        let data = try JSONEncoder().encode(self)
+        guard let dictionary = try JSONSerialization.jsonObject(with: data, options: .fragmentsAllowed) as? [String: Any] else {
+            fatalError("JSONSerialization failed to encode")
+        }
+        return dictionary
     }
 }

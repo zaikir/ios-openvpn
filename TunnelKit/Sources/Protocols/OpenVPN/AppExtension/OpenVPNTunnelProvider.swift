@@ -3,7 +3,7 @@
 //  TunnelKit
 //
 //  Created by Davide De Rosa on 2/1/17.
-//  Copyright (c) 2020 Davide De Rosa. All rights reserved.
+//  Copyright (c) 2021 Davide De Rosa. All rights reserved.
 //
 //  https://github.com/passepartoutvpn
 //
@@ -36,6 +36,11 @@
 
 import NetworkExtension
 import SwiftyBeaver
+#if os(iOS)
+import SystemConfiguration.CaptiveNetwork
+#else
+import CoreWLAN
+#endif
 import __TunnelKitCore
 
 private let log = SwiftyBeaver.self
@@ -85,8 +90,6 @@ open class OpenVPNTunnelProvider: NEPacketTunnelProvider {
     
     private let memoryLog = MemoryDestination()
 
-    private let observer = InterfaceObserver()
-    
     private let tunnelQueue = DispatchQueue(label: OpenVPNTunnelProvider.description(), qos: .utility)
     
     private let prngSeedLength = 64
@@ -123,8 +126,11 @@ open class OpenVPNTunnelProvider: NEPacketTunnelProvider {
     
     private var isCountingData = false
     
+    private var shouldReconnect = false
+
     // MARK: NEPacketTunnelProvider (XPC queue)
     
+    /// :nodoc:
     open override var reasserting: Bool {
         didSet {
             log.debug("Reasserting flag \(reasserting ? "set" : "cleared")")
@@ -172,18 +178,7 @@ open class OpenVPNTunnelProvider: NEPacketTunnelProvider {
             return
         }
 
-        // optional credentials
-        let credentials: OpenVPN.Credentials?
-        if let username = protocolConfiguration.username, let passwordReference = protocolConfiguration.passwordReference,
-            let password = try? Keychain.password(for: username, reference: passwordReference) {
-
-            credentials = OpenVPN.Credentials(username, password)
-        } else {
-            credentials = nil
-        }
-
-        strategy = ConnectionStrategy(configuration: cfg)
-
+        // prepare for logging (append)
         if let content = cfg.existingLog(in: appGroup) {
             var existingLog = content.components(separatedBy: "\n")
             if let i = existingLog.firstIndex(of: logSeparator) {
@@ -195,15 +190,29 @@ open class OpenVPNTunnelProvider: NEPacketTunnelProvider {
             existingLog.append("")
             memoryLog.start(with: existingLog)
         }
-
         configureLogging(
             debug: cfg.shouldDebug,
             customFormat: cfg.debugLogFormat
         )
         
+        // logging only ACTIVE from now on
+        
         // override library configuration
         if let masksPrivateData = cfg.masksPrivateData {
             CoreConfiguration.masksPrivateData = masksPrivateData
+        }
+        if let versionIdentifier = cfg.versionIdentifier {
+            CoreConfiguration.versionIdentifier = versionIdentifier
+        }
+
+        // optional credentials
+        let credentials: OpenVPN.Credentials?
+        if let username = protocolConfiguration.username, let passwordReference = protocolConfiguration.passwordReference,
+            let password = try? Keychain.password(for: username, reference: passwordReference) {
+
+            credentials = OpenVPN.Credentials(username, password)
+        } else {
+            credentials = nil
         }
 
         log.info("Starting tunnel...")
@@ -215,7 +224,10 @@ open class OpenVPNTunnelProvider: NEPacketTunnelProvider {
         }
 
         cfg.print(appVersion: appVersion)
-        
+
+        // prepare to pick endpoints
+        strategy = ConnectionStrategy(configuration: cfg)
+
         let session: OpenVPNSession
         do {
             session = try OpenVPNSession(queue: tunnelQueue, configuration: cfg.sessionConfiguration, cachesURL: cachesURL)
@@ -282,7 +294,7 @@ open class OpenVPNTunnelProvider: NEPacketTunnelProvider {
             }
             
         case .serverConfiguration:
-            if let cfg = session?.serverConfiguration() {
+            if let cfg = session?.serverConfiguration() as? OpenVPN.Configuration {
                 let encoder = JSONEncoder()
                 response = try? encoder.encode(cfg)
             }
@@ -295,10 +307,12 @@ open class OpenVPNTunnelProvider: NEPacketTunnelProvider {
 
     // MARK: Wake/Sleep (debugging placeholders)
 
+    /// :nodoc:
     open override func wake() {
         log.verbose("Wake signal received")
     }
     
+    /// :nodoc:
     open override func sleep(completionHandler: @escaping () -> Void) {
         log.verbose("Sleep signal received")
         completionHandler()
@@ -306,7 +320,7 @@ open class OpenVPNTunnelProvider: NEPacketTunnelProvider {
     
     // MARK: Connection (tunnel queue)
     
-    private func connectTunnel(upgradedSocket: GenericSocket? = nil, preferredAddress: String? = nil) {
+    private func connectTunnel(upgradedSocket: GenericSocket? = nil) {
         log.info("Creating link session")
         
         // reuse upgraded socket
@@ -316,7 +330,7 @@ open class OpenVPNTunnelProvider: NEPacketTunnelProvider {
             return
         }
         
-        strategy.createSocket(from: self, timeout: dnsTimeout, preferredAddress: preferredAddress, queue: tunnelQueue) { (socket, error) in
+        strategy.createSocket(from: self, timeout: dnsTimeout, queue: tunnelQueue) { (socket, error) in
             guard let socket = socket else {
                 self.disposeTunnel(error: error)
                 return
@@ -336,7 +350,7 @@ open class OpenVPNTunnelProvider: NEPacketTunnelProvider {
     }
     
     private func finishTunnelDisconnection(error: Error?) {
-        if let session = session, !(reasserting && session.canRebindLink()) {
+        if let session = session, !(shouldReconnect && session.canRebindLink()) {
             session.cleanup()
         }
         
@@ -414,12 +428,12 @@ extension OpenVPNTunnelProvider: GenericSocketDelegate {
     /// :nodoc:
     public func socketDidTimeout(_ socket: GenericSocket) {
         log.debug("Socket timed out waiting for activity, cancelling...")
-        reasserting = true
+        shouldReconnect = true
         socket.shutdown()
 
         // fallback: TCP connection timeout suggests falling back
         if let _ = socket as? NETCPSocket {
-            guard tryNextProtocol() else {
+            guard tryNextEndpoint() else {
                 // disposeTunnel
                 return
             }
@@ -432,10 +446,10 @@ extension OpenVPNTunnelProvider: GenericSocketDelegate {
             return
         }
         if session.canRebindLink() {
-            session.rebindLink(producer.link(withMTU: cfg.mtu))
+            session.rebindLink(producer.link())
             reasserting = false
         } else {
-            session.setLink(producer.link(withMTU: cfg.mtu))
+            session.setLink(producer.link())
         }
     }
     
@@ -466,25 +480,26 @@ extension OpenVPNTunnelProvider: GenericSocketDelegate {
 
         // fallback: UDP is connection-less, treat negotiation timeout as socket timeout
         if didTimeoutNegotiation {
-            guard tryNextProtocol() else {
+            guard tryNextEndpoint() else {
                 // disposeTunnel
                 return
             }
         }
 
         // reconnect?
-        if reasserting {
+        if shouldReconnect {
             log.debug("Disconnection is recoverable, tunnel will reconnect in \(reconnectionDelay) milliseconds...")
             tunnelQueue.schedule(after: .milliseconds(reconnectionDelay)) {
-                log.debug("Tunnel is about to reconnect...")
 
-                // give up if reasserting cleared in the meantime
-                guard self.reasserting else {
-                    log.warning("Reasserting flag was cleared in the meantime")
+                // give up if shouldReconnect cleared in the meantime
+                guard self.shouldReconnect else {
+                    log.warning("Reconnection flag was cleared in the meantime")
                     return
                 }
 
-                self.connectTunnel(upgradedSocket: upgradedSocket, preferredAddress: socket.remoteAddress)
+                log.debug("Tunnel is about to reconnect...")
+                self.reasserting = true
+                self.connectTunnel(upgradedSocket: upgradedSocket)
             }
             return
         }
@@ -560,7 +575,7 @@ extension OpenVPNTunnelProvider: OpenVPNSessionDelegate {
             
             log.info("Tunnel interface is now UP")
             
-            session.setTunnel(tunnel: NETunnelInterface(impl: self.packetFlow, isIPv6: options.ipv6 != nil))
+            session.setTunnel(tunnel: NETunnelInterface(impl: self.packetFlow))
 
             self.pendingStartHandler?(nil)
             self.pendingStartHandler = nil
@@ -571,13 +586,17 @@ extension OpenVPNTunnelProvider: OpenVPNSessionDelegate {
     }
     
     /// :nodoc:
-    public func sessionDidStop(_: OpenVPNSession, shouldReconnect: Bool) {
-        log.info("Session did stop")
+    public func sessionDidStop(_: OpenVPNSession, withError error: Error?, shouldReconnect: Bool) {
+        if let error = error {
+            log.error("Session did stop with error: \(error)")
+        } else {
+            log.info("Session did stop")
+        }
 
         isCountingData = false
         refreshDataCount()
 
-        reasserting = shouldReconnect
+        self.shouldReconnect = shouldReconnect
         socket?.shutdown()
     }
     
@@ -658,35 +677,70 @@ extension OpenVPNTunnelProvider: OpenVPNSessionDelegate {
             return
         }
         
-        var dnsServers = [String]()
-        //First check for dnsServers from the ovpn session configuration
-        if let sessionConfigurationDnsServers = cfg.sessionConfiguration.dnsServers, !sessionConfigurationDnsServers.isEmpty {
-            dnsServers = sessionConfigurationDnsServers
-        } else {
-            //If empty, use the dnsServers provided from the tunnel
-            if let servers = options.dnsServers {
-                dnsServers = servers
+        var dnsServers: [String] = []
+        var dnsSettings: NEDNSSettings?
+        if #available(iOS 14, macOS 11, *) {
+            switch cfg.sessionConfiguration.dnsProtocol {
+            case .https:
+                dnsServers = cfg.sessionConfiguration.dnsServers ?? []
+                guard let serverURL = cfg.sessionConfiguration.dnsHTTPSURL else {
+                    break
+                }
+                let specific = NEDNSOverHTTPSSettings(servers: dnsServers)
+                specific.serverURL = serverURL
+                dnsSettings = specific
+                log.info("DNS over HTTPS: Using servers \(dnsServers.maskedDescription)")
+                log.info("\tHTTPS URL: \(serverURL.maskedDescription)")
+
+            case .tls:
+                guard let dnsServers = cfg.sessionConfiguration.dnsServers else {
+                    session?.shutdown(error: ProviderError.dnsFailure)
+                    return
+                }
+                guard let serverName = cfg.sessionConfiguration.dnsTLSServerName else {
+                    break
+                }
+                let specific = NEDNSOverTLSSettings(servers: dnsServers)
+                specific.serverName = serverName
+                dnsSettings = specific
+                log.info("DNS over TLS: Using servers \(dnsServers.maskedDescription)")
+                log.info("\tTLS server name: \(serverName.maskedDescription)")
+
+            default:
+                break
             }
         }
 
         // fall back
-        if !dnsServers.isEmpty {
-            log.info("DNS: Using servers \(dnsServers.maskedDescription)")
-        } else {
-            log.warning("DNS: No servers provided, using fall-back servers: \(fallbackDNSServers.maskedDescription)")
-            dnsServers = fallbackDNSServers
+        if dnsSettings == nil {
+            dnsServers = []
+            if let servers = cfg.sessionConfiguration.dnsServers,
+               !servers.isEmpty {
+                dnsServers = servers
+            } else if let servers = options.dnsServers {
+                dnsServers = servers
+            }
+            if !dnsServers.isEmpty {
+                log.info("DNS: Using servers \(dnsServers.maskedDescription)")
+                dnsSettings = NEDNSSettings(servers: dnsServers)
+            } else {
+//                log.warning("DNS: No servers provided, using fall-back servers: \(fallbackDNSServers.maskedDescription)")
+//                dnsSettings = NEDNSSettings(servers: fallbackDNSServers)
+                log.warning("DNS: No settings provided, using current network settings")
+            }
         }
 
-        let dnsSettings = NEDNSSettings(servers: dnsServers)
+        // "hack" for split DNS (i.e. use VPN only for DNS)
         if !isGateway {
-            dnsSettings.matchDomains = [""]
+            dnsSettings?.matchDomains = [""]
         }
+        
         if let searchDomains = cfg.sessionConfiguration.searchDomains ?? options.searchDomains {
             log.info("DNS: Using search domains \(searchDomains.maskedDescription)")
-            dnsSettings.domainName = searchDomains.first
-            dnsSettings.searchDomains = searchDomains
+            dnsSettings?.domainName = searchDomains.first
+            dnsSettings?.searchDomains = searchDomains
             if !isGateway {
-                dnsSettings.matchDomains = dnsSettings.searchDomains
+                dnsSettings?.matchDomains = dnsSettings?.searchDomains
             }
         }
         
@@ -738,7 +792,7 @@ extension OpenVPNTunnelProvider: OpenVPNSessionDelegate {
                 let gateway = table.defaultGateway4()?.gateway(),
                 let route = table.broadestRoute4(matchingDestination: gateway) {
 
-                route.partitioned().forEach {
+                route.partitioned()?.forEach {
                     let destination = $0.network()
                     guard let netmask = $0.networkMask() else {
                         return
@@ -755,7 +809,7 @@ extension OpenVPNTunnelProvider: OpenVPNSessionDelegate {
                 let gateway = table.defaultGateway6()?.gateway(),
                 let route = table.broadestRoute6(matchingDestination: gateway) {
 
-                route.partitioned().forEach {
+                route.partitioned()?.forEach {
                     let destination = $0.network()
                     let prefix = $0.prefix()
                     
@@ -773,15 +827,17 @@ extension OpenVPNTunnelProvider: OpenVPNSessionDelegate {
         newSettings.ipv6Settings = ipv6Settings
         newSettings.dnsSettings = dnsSettings
         newSettings.proxySettings = proxySettings
-        newSettings.mtu = NSNumber(value: cfg.mtu)
-
+        if let mtu = cfg.sessionConfiguration.mtu {
+            newSettings.mtu = NSNumber(value: mtu)
+        }
+      
         setTunnelNetworkSettings(newSettings, completionHandler: completionHandler)
     }
 }
 
 extension OpenVPNTunnelProvider {
-    private func tryNextProtocol() -> Bool {
-        guard strategy.tryNextProtocol() else {
+    private func tryNextEndpoint() -> Bool {
+        guard strategy.tryNextEndpoint() else {
             disposeTunnel(error: ProviderError.exhaustedProtocols)
             return false
         }
@@ -815,15 +871,17 @@ extension OpenVPNTunnelProvider {
             memoryLog.flush(to: url)
         }
     }
-    
+
     private func logCurrentSSID() {
-        if let ssid = observer.currentWifiNetworkName() {
-            log.debug("Current SSID: '\(ssid.maskedDescription)'")
-        } else {
-            log.debug("Current SSID: none (disconnected from WiFi)")
+        InterfaceObserver.fetchCurrentSSID {
+            if let ssid = $0 {
+                log.debug("Current SSID: '\(ssid.maskedDescription)'")
+            } else {
+                log.debug("Current SSID: none (disconnected from WiFi)")
+            }
         }
     }
-    
+
 //    private func anyPointer(_ object: Any?) -> UnsafeMutableRawPointer {
 //        let anyObject = object as AnyObject
 //        return Unmanaged<AnyObject>.passUnretained(anyObject).toOpaque()
@@ -847,7 +905,7 @@ extension OpenVPNTunnelProvider {
             case .tlsCertificateAuthority, .tlsClientCertificate, .tlsClientKey:
                 return .tlsInitialization
                 
-            case .tlsServerCertificate, .tlsServerEKU:
+            case .tlsServerCertificate, .tlsServerEKU, .tlsServerHost:
                 return .tlsServerVerification
                 
             case .tlsHandshake:
@@ -881,6 +939,9 @@ extension OpenVPNTunnelProvider {
                 
             case .noRouting:
                 return .routing
+                
+            case .serverShutdown:
+                return .serverShutdown
 
             default:
                 return .unexpectedReply

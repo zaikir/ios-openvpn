@@ -3,7 +3,7 @@
 //  TunnelKit
 //
 //  Created by Davide De Rosa on 2/3/17.
-//  Copyright (c) 2020 Davide De Rosa. All rights reserved.
+//  Copyright (c) 2021 Davide De Rosa. All rights reserved.
 //
 //  https://github.com/passepartoutvpn
 //
@@ -55,10 +55,11 @@ public protocol OpenVPNSessionDelegate: class {
     /**
      Called after stopping a session.
      
+     - Parameter error: An optional `Error` being the reason of the stop.
      - Parameter shouldReconnect: When `true`, the session can/should be restarted. Usually because the stop reason was recoverable.
      - Seealso: `OpenVPNSession.reconnect(...)`
      */
-    func sessionDidStop(_: OpenVPNSession, shouldReconnect: Bool)
+    func sessionDidStop(_: OpenVPNSession, withError error: Error?, shouldReconnect: Bool)
 }
 
 /// Provides methods to set up and maintain an OpenVPN session.
@@ -308,7 +309,7 @@ public class OpenVPNSession: Session {
         return controlChannel.currentDataCount()
     }
     
-    public func serverConfiguration() -> OpenVPN.Configuration? {
+    public func serverConfiguration() -> Any? {
         return pushReply?.options
     }
     
@@ -475,7 +476,7 @@ public class OpenVPNSession: Session {
                 guard let _ = keys[key] else {
                     log.warning("Key with id \(key) not found")
 //                    deferStop(.shutdown, OpenVPNError.badKey)
-                    return
+                    continue // JK: This used to be return, but we'd see connections that would stay in Connecting… state forever
                 }
 
                 // XXX: improve with array reference
@@ -745,7 +746,7 @@ public class OpenVPNSession: Session {
     
     private func completeConnection() {
         setupEncryption()
-        authenticator = nil
+        authenticator?.reset()
         negotiationKey.controlState = .connected
         connectedDate = Date()
         transitionKeys()
@@ -787,7 +788,9 @@ public class OpenVPNSession: Session {
                 caPath: caURL.path,
                 clientCertificatePath: (configuration.clientCertificate != nil) ? clientCertificateURL.path : nil,
                 clientKeyPath: (configuration.clientKey != nil) ? clientKeyURL.path : nil,
-                checksEKU: configuration.checksEKU ?? false
+                checksEKU: configuration.checksEKU ?? false,
+                checksSANHost: configuration.checksSANHost ?? false,
+                hostname: configuration.sanHost
             )
             if let tlsSecurityLevel = configuration.tlsSecurityLevel {
                 tls.securityLevel = tlsSecurityLevel
@@ -907,6 +910,11 @@ public class OpenVPNSession: Session {
 
     // Ruby: handle_ctrl_msg
     private func handleControlMessage(_ message: String) {
+        if CoreConfiguration.logsSensitiveData {
+            log.debug("Received control message: \"\(message)\"")
+        }
+
+        // disconnect on authentication failure
         guard !message.hasPrefix("AUTH_FAILED") else {
 
             // XXX: retry without client options
@@ -921,14 +929,18 @@ public class OpenVPNSession: Session {
             return
         }
         
-        guard (negotiationKey.controlState == .preIfConfig) else {
+        // disconnect on remote server restart (--explicit-exit-notify)
+        guard !message.hasPrefix("RESTART") else {
+            log.debug("Disconnecting due to server shutdown")
+            deferStop(.shutdown, OpenVPNError.serverShutdown)
+            return
+        }
+        
+        // handle authentication from now on
+        guard negotiationKey.controlState == .preIfConfig else {
             return
         }
 
-        if CoreConfiguration.logsSensitiveData {
-            log.debug("Received control message: \"\(message)\"")
-        }
-        
         let completeMessage: String
         if let continuated = continuatedPushReplyMessage {
             completeMessage = "\(continuated),\(message)"
@@ -1003,12 +1015,12 @@ public class OpenVPNSession: Session {
     
     // Ruby: q_ctrl
     private func enqueueControlPackets(code: PacketCode, key: UInt8, payload: Data) {
-        guard let link = link else {
+        guard let _ = link else {
             log.warning("Not writing to LINK, interface is down")
             return
         }
 
-        controlChannel.enqueueOutboundPackets(withCode: code, key: key, payload: payload, maxPacketSize: link.mtu)
+        controlChannel.enqueueOutboundPackets(withCode: code, key: key, payload: payload, maxPacketSize: 1000)
         flushControlQueue()
     }
     
@@ -1270,7 +1282,7 @@ public class OpenVPNSession: Session {
             log.info("Trigger shutdown on request")
         }
         stopError = error
-        delegate?.sessionDidStop(self, shouldReconnect: false)
+        delegate?.sessionDidStop(self, withError: error, shouldReconnect: false)
     }
     
     private func doReconnect(error: Error?) {
@@ -1280,6 +1292,6 @@ public class OpenVPNSession: Session {
             log.info("Trigger reconnection on request")
         }
         stopError = error
-        delegate?.sessionDidStop(self, shouldReconnect: true)
+        delegate?.sessionDidStop(self, withError: error, shouldReconnect: true)
     }
 }

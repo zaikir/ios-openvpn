@@ -7,9 +7,99 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- Handle `--data-ciphers` and `data-ciphers-fallback` from OpenVPN 2.5
+- Support DNS over HTTPS (DoH) and TLS (DoT).
+
+### Fixed
+
+- Do not override network DNS settings when not provided by VPN. [#197](https://github.com/passepartoutvpn/tunnelkit/issues/197)
+
+## 3.2.0 (2021-01-07)
+
+### Changed
+
+- Encoding of internal provider configuration.
+
+## 3.1.0 (2020-12-28)
+
+### Added
+
+- Parse `--tun-mtu` option.
+
+### Changed
+
+- Update API to access current Wi-Fi SSID.
+- Refactor access to keychain.
+
+## 3.0.0 (2020-11-15)
+
+### Added
+
+- Support for Apple Silicon (macOS arm64).
+- Customize IV_UI_VER (pahnev). [#178](https://github.com/passepartoutvpn/tunnelkit/pull/178)
+
+### Changed
+
+- Deployment targets raised to iOS 12.0 and macOS 10.15
+- Use active profile name in VPN configuration (device settings).
+
+### Fixed
+
+- Incorrect tunnel bundle identifiers in Demo. [#176](https://github.com/passepartoutvpn/tunnelkit/issues/176)
+- IV_PLAT in peer info was hardcoded to "mac" (pahnev). [#177](https://github.com/passepartoutvpn/tunnelkit/pull/177)
+
+# 2.2.7 (2020-06-11)
+
+### Fixed
+
+- Code cleanup.
+
+## 2.2.6 (2020-05-12)
+
+### Fixed
+
+- Address concerns from Guido Vranken fuzzers. [#141](https://github.com/passepartoutvpn/tunnelkit/pull/141)
+
+## 2.2.5 (2020-05-12)
+
+### Changed
+
+- Improve IP Header parsing (roop). [#171](https://github.com/passepartoutvpn/tunnelkit/pull/171)
+
+## 2.2.4 (2020-05-10)
+
+### Added
+
+- Support for SAN hostname in certificates (jaroslavas). [#168](https://github.com/passepartoutvpn/tunnelkit/pull/168)
+
+### Fixed
+
+- IPv6 traffic broken on Mojave. [#146](https://github.com/passepartoutvpn/tunnelkit/issues/146), [#169](https://github.com/passepartoutvpn/tunnelkit/pull/169)
+- Restore tunnel MTU setting (ueshiba). [#148](https://github.com/passepartoutvpn/tunnelkit/pull/148)
+- Transient connected state upon connection failure (rob-patchett). [#128](https://github.com/passepartoutvpn/tunnelkit/pull/128)
+
+## 2.2.3 (2020-04-21)
+
+### Changed
+
+- Upgrade OpenSSL to 1.1.1g. [#166](https://github.com/passepartoutvpn/tunnelkit/issues/166)
+
+## 2.2.2 (2020-04-20)
+
+### Changed
+
+- Upgrade OpenSSL to 1.1.1f. [#165](https://github.com/passepartoutvpn/tunnelkit/issues/165)
+
 ### Fixed
 
 - Index out of range during negotiation (Grivus). [#143](https://github.com/passepartoutvpn/tunnelkit/pull/143)
+- Handle server shutdown/restart (remote `--explicit-exit-notify`). [#131](https://github.com/passepartoutvpn/tunnelkit/issues/131)
+- Abrupt disconnection upon unknown packet key id (johankool). [#161](https://github.com/passepartoutvpn/tunnelkit/pull/161)
+- Handle explicit IPv4/IPv6 protocols (`4` or `6` suffix in `--proto`). [#153](https://github.com/passepartoutvpn/tunnelkit/issues/153)
+- Mitigate IP traffic breaking on Mojave. [#146](https://github.com/passepartoutvpn/tunnelkit/issues/146)
+- Pointer warnings from Xcode 11.4 upgrade.
 
 ## 2.2.1 (2019-12-14)
 

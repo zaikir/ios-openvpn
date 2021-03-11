@@ -1,13 +1,12 @@
 # TunnelKit
 
-![iOS 11+](https://img.shields.io/badge/ios-11+-green.svg)
-[![OpenSSL 1.1.1d](https://img.shields.io/badge/openssl-1.1.1d-d69c68.svg)](https://www.openssl.org/news/openssl-1.1.1-notes.html)
+![iOS 12+](https://img.shields.io/badge/ios-12+-green.svg)
+![macOS 10.15+](https://img.shields.io/badge/macos-10.15+-green.svg)
+[![OpenSSL 1.1.1h](https://img.shields.io/badge/openssl-1.1.1h-d69c68.svg)](https://www.openssl.org/news/openssl-1.1.1-notes.html)
 [![License GPLv3](https://img.shields.io/badge/license-GPLv3-lightgray.svg)](LICENSE)
 [![Travis-CI](https://api.travis-ci.org/passepartoutvpn/tunnelkit.svg?branch=master)](https://travis-ci.org/passepartoutvpn/tunnelkit)
 
 This library provides a simplified Swift/Obj-C implementation of the OpenVPN® protocol for the Apple platforms. The crypto layer is built on top of [OpenSSL 1.1.1][dep-openssl], which in turn enables support for a certain range of encryption and digest algorithms.
-
-<a href="https://www.patreon.com/keeshux"><img src="https://c5.patreon.com/external/logo/become_a_patron_button@2x.png" width="160"></a>
 
 ## Getting started
 
@@ -54,8 +53,8 @@ Unsupported:
 
 Ignored:
 
-- MTU overrides
-    - `--*-mtu` and variants
+- Some MTU overrides
+    - `--link-mtu` and variants
     - `--mssfix`
 - Multiple `--remote` with different `host` values (first wins)
 - Static client-side routes
@@ -66,8 +65,8 @@ Many other flags are ignored too but it's normally not an issue.
 
 ### Requirements
 
-- iOS 11.0+ / macOS 10.11+
-- Xcode 10+ (Swift 5)
+- iOS 12.0+ / macOS 10.15+
+- Xcode 11+ (Swift 5)
 - Git (preinstalled with Xcode Command Line Tools)
 - Ruby (preinstalled with macOS)
 - [CocoaPods 1.6.0][dep-cocoapods]
@@ -94,15 +93,11 @@ Assuming you have a [working CocoaPods environment][dep-cocoapods], setting up t
 
     $ pod install
 
-After that, open `TunnelKit.xcworkspace` in Xcode and run the unit tests found in the `TunnelKitTests` folder. A simple CMD+U while on `TunnelKit-iOS` should do that as well.
+After that, open `TunnelKit.xcworkspace` in Xcode and run the unit tests found in the `TunnelKitTests` folder. A simple CMD+U while on `TunnelKit-(iOS|macOS)` should do that as well.
 
 #### Demo
 
-There is a `Demo` directory containing a simple app for testing the tunnel, called `BasicTunnel`. As usual, prepare for CocoaPods:
-
-    $ pod install
-
-then open `Demo.xcworkspace` and run the `BasicTunnel-iOS` target.
+There are demo targets containing a simple app for testing the tunnel, called `BasicTunnel`.
 
 For the VPN to work properly, the `BasicTunnel` demo requires:
 
@@ -111,7 +106,7 @@ For the VPN to work properly, the `BasicTunnel` demo requires:
 
 both in the main app and the tunnel extension target.
 
-In order to test connection to your own server, modify the file `Demo/BasicTunnel-[iOS|macOS]/ViewController.swift` and make sure to set `ca` to the PEM encoded certificate of your VPN server's CA.
+In order to test connectivity in your own environment, modify the file `TunnelKit/Demo/Configuration.swift` to match your VPN server parameters.
 
 Example:
 
@@ -155,6 +150,15 @@ There are no physical network implementations (e.g. UDP or TCP) in this module.
 
 Provides a layer on top of the NetworkExtension framework. Most importantly, bridges native [NWUDPSession][ne-udp] and [NWTCPConnection][ne-tcp] to an abstract `GenericSocket` interface, thus making a multi-protocol VPN dramatically easier to manage.
 
+### Manager
+
+This subspec includes convenient classes to control the VPN tunnel from your app without the NetworkExtension headaches. Have a look at `VPNProvider` implementations:
+
+- `MockVPNProvider` (default, useful to test on simulator)
+- `OpenVPNProvider`
+
+Set `VPN.shared` to either of them at app launch time.
+
 ### Protocols/OpenVPN
 
 Here you will find the low-level entities on top of which an OpenVPN connection is established. Code is mixed Swift and Obj-C, most of it is not exposed to consumers. The module depends on OpenSSL.
@@ -170,6 +174,8 @@ A debug log snapshot is optionally maintained and shared by the tunnel provider 
 Due to the restrictive license (GPLv2), LZO support is provided as an optional subspec.
 
 ## License
+
+Copyright (c) 2020 Davide De Rosa. All rights reserved.
 
 ### Part I
 
@@ -193,14 +199,14 @@ For more details please see [CONTRIBUTING][contrib-readme].
 
 ## Credits
 
-- [lzo][dep-lzo-website] - © 1996 - 2017 Markus F.X.J. Oberhumer
-- [PIATunnel][dep-piatunnel-repo] - © 2018-Present Private Internet Access
+- [lzo][dep-lzo-website] - Copyright (c) 1996-2017 Markus F.X.J. Oberhumer
+- [PIATunnel][dep-piatunnel-repo] - Copyright (c) 2018-Present Private Internet Access
 - [SURFnet][surfnet]
-- [SwiftyBeaver][dep-swiftybeaver-repo] - © 2015 Sebastian Kreutzberger
+- [SwiftyBeaver][dep-swiftybeaver-repo] - Copyright (c) 2015 Sebastian Kreutzberger
 
 This product includes software developed by the OpenSSL Project for use in the OpenSSL Toolkit. ([https://www.openssl.org/][dep-openssl])
 
-© 2002-2018 OpenVPN Inc. - OpenVPN is a registered trademark of OpenVPN Inc.
+Copyright (c) 2002-2018 OpenVPN Inc. - OpenVPN is a registered trademark of OpenVPN Inc.
 
 ## Contacts
 
@@ -234,4 +240,3 @@ Website: [passepartoutvpn.app][about-website]
 
 [about-twitter]: https://twitter.com/keeshux
 [about-website]: https://passepartoutvpn.app
-[about-patreon]: https://www.patreon.com/keeshux
