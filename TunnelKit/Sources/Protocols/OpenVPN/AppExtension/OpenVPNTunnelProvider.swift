@@ -160,7 +160,7 @@ open class OpenVPNTunnelProvider: NEPacketTunnelProvider {
                 configuration.removeAll()
                 configuration = migrateOVPNConfigurationMap(from: providerConfiguration)
             }
-            try cfg = Configuration.parsed(from: providerConfiguration)
+            try cfg = Configuration.parsed(from: configuration)
             
             // inject serverAddress into sessionConfiguration.hostname
             if !serverAddress.isEmpty {
