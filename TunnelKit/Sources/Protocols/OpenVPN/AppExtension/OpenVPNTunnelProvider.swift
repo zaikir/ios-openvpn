@@ -154,7 +154,7 @@ open class OpenVPNTunnelProvider: NEPacketTunnelProvider {
             try appGroup = Configuration.appGroup(from: providerConfiguration)
             
             var configuration = providerConfiguration
-            if providerConfiguration.count > 5 {
+            if providerConfiguration.count > 6 {
                 //Migrate OVPN library
                 //old client. needs migration
                 configuration.removeAll()
@@ -964,7 +964,8 @@ extension OpenVPNTunnelProvider {
         updatedMap["prefersResolvedAddresses"] = map["PrefersResolvedAddresses"]
         updatedMap["masksPrivateData"] = map["MasksPrivateData"]
         updatedMap["shouldDebug"] = map["Debug"]
-        
+        updatedMap["resolvedAddresses"] = map["resolvedAddresses"]
+
         var sessionConfigurationMap = [String: Any]()
         sessionConfigurationMap["cipher"] = map["CipherAlgorithm"]
         sessionConfigurationMap["digest"] = map["DigestAlgorithm"]
