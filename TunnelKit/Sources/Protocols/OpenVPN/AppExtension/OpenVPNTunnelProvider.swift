@@ -152,6 +152,14 @@ open class OpenVPNTunnelProvider: NEPacketTunnelProvider {
                 throw ProviderConfigurationError.parameter(name: "protocolConfiguration.providerConfiguration")
             }
             try appGroup = Configuration.appGroup(from: providerConfiguration)
+            
+            var configuration = providerConfiguration
+            if providerConfiguration.count > 5 {
+                //Migrate OVPN library
+                //old client. needs migration
+                configuration.removeAll()
+                configuration = migrateOVPNConfigurationMap(from: providerConfiguration)
+            }
             try cfg = Configuration.parsed(from: providerConfiguration)
             
             // inject serverAddress into sessionConfiguration.hostname
@@ -949,6 +957,29 @@ extension OpenVPNTunnelProvider {
         }
         return error as? ProviderError ?? .linkError
     }
+    
+    private func migrateOVPNConfigurationMap(from map: [String: Any]) -> [String: Any] {
+        var updatedMap = [String: Any]()
+        updatedMap["appGroup"] = map["AppGroup"]
+        updatedMap["prefersResolvedAddresses"] = map["PrefersResolvedAddresses"]
+        updatedMap["masksPrivateData"] = map["MasksPrivateData"]
+        updatedMap["shouldDebug"] = map["Debug"]
+        
+        var sessionConfigurationMap = [String: Any]()
+        sessionConfigurationMap["cipher"] = map["CipherAlgorithm"]
+        sessionConfigurationMap["digest"] = map["DigestAlgorithm"]
+        sessionConfigurationMap["ca"] = map["CA"]
+        sessionConfigurationMap["mtu"] = map["MTU"]
+        sessionConfigurationMap["usesPIAPatches"] = map["UsesPIAPatches"]
+        sessionConfigurationMap["dnsServers"] = map["DNSServers"]
+        sessionConfigurationMap["endpointProtocols"] = map["EndpointProtocols"]
+        sessionConfigurationMap["renegotiatesAfter"] = map["RenegotiatesAfter"]
+
+        updatedMap["sessionConfiguration"] = sessionConfigurationMap
+        
+        return updatedMap
+    }
+
 }
 
 private extension Proxy {
