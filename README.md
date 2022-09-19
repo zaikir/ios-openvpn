@@ -1,12 +1,11 @@
-# TunnelKit
-
 ![iOS 12+](https://img.shields.io/badge/ios-12+-green.svg)
 ![macOS 10.15+](https://img.shields.io/badge/macos-10.15+-green.svg)
-[![OpenSSL 1.1.1h](https://img.shields.io/badge/openssl-1.1.1h-d69c68.svg)](https://www.openssl.org/news/openssl-1.1.1-notes.html)
+[![OpenSSL 1.1.1l](https://img.shields.io/badge/openssl-1.1.1l-d69c68.svg)](https://www.openssl.org/news/openssl-1.1.1-notes.html)
 [![License GPLv3](https://img.shields.io/badge/license-GPLv3-lightgray.svg)](LICENSE)
-[![Travis-CI](https://api.travis-ci.org/passepartoutvpn/tunnelkit.svg?branch=master)](https://travis-ci.org/passepartoutvpn/tunnelkit)
 
-This library provides a simplified Swift/Obj-C implementation of the OpenVPN® protocol for the Apple platforms. The crypto layer is built on top of [OpenSSL 1.1.1][dep-openssl], which in turn enables support for a certain range of encryption and digest algorithms.
+# TunnelKit
+
+This library provides a generic framework for VPN development and a simplified Swift/Obj-C implementation of the OpenVPN® protocol for the Apple platforms. The crypto layer is built on top of [OpenSSL 1.1.1][dep-openssl], which in turn enables support for a certain range of encryption and digest algorithms.
 
 ## Getting started
 
@@ -39,9 +38,16 @@ The library therefore supports compression framing, just not newer compression. 
 
 ### Support for .ovpn configuration
 
-TunnelKit can parse .ovpn configuration files. Below are a few limitations worth mentioning.
+TunnelKit can parse .ovpn configuration files. Below are a few details worth mentioning.
 
-Unsupported:
+#### Non-standard
+
+- Single-byte XOR masking
+    - Via `--scramble xormask <character>`
+    - XOR all incoming and outgoing bytes by the ASCII value of the character argument
+    - See [Tunnelblick website][about-tunnelblick-xor] for more details
+
+#### Unsupported
 
 - UDP fragmentation, i.e. `--fragment`
 - Compression via `--compress` other than empty or `lzo`
@@ -51,7 +57,7 @@ Unsupported:
 - `<connection>` blocks
 - `vpn_gateway` and `net_gateway` literals in routes
 
-Ignored:
+#### Ignored
 
 - Some MTU overrides
     - `--link-mtu` and variants
@@ -66,38 +72,20 @@ Many other flags are ignored too but it's normally not an issue.
 ### Requirements
 
 - iOS 12.0+ / macOS 10.15+
-- Xcode 11+ (Swift 5)
+- SwiftPM 5
 - Git (preinstalled with Xcode Command Line Tools)
-- Ruby (preinstalled with macOS)
-- [CocoaPods 1.6.0][dep-cocoapods]
 - [jazzy][dep-jazzy] (optional, for documentation)
-- [Disable Bitcode][issue-51]
 
-It's highly recommended to use the Git and Ruby packages provided by [Homebrew][dep-brew].
+It's highly recommended to use the Git package provided by [Homebrew][dep-brew].
 
-### CocoaPods
-
-To use with CocoaPods just add this to your Podfile:
-
-```ruby
-pod 'TunnelKit'
-```
-
-### Testing
+### Demo
 
 Download the library codebase locally:
 
     $ git clone https://github.com/passepartoutvpn/tunnelkit.git
 
-Assuming you have a [working CocoaPods environment][dep-cocoapods], setting up the library workspace only requires installing the pod dependencies:
 
-    $ pod install
-
-After that, open `TunnelKit.xcworkspace` in Xcode and run the unit tests found in the `TunnelKitTests` folder. A simple CMD+U while on `TunnelKit-(iOS|macOS)` should do that as well.
-
-#### Demo
-
-There are demo targets containing a simple app for testing the tunnel, called `BasicTunnel`.
+There are demo targets containing a simple app for testing the tunnel, called `BasicTunnel`. Open `Demo/TunnelKit.xcodeproject` in Xcode and run it on both iOS and macOS.
 
 For the VPN to work properly, the `BasicTunnel` demo requires:
 
@@ -106,7 +94,7 @@ For the VPN to work properly, the `BasicTunnel` demo requires:
 
 both in the main app and the tunnel extension target.
 
-In order to test connectivity in your own environment, modify the file `TunnelKit/Demo/Configuration.swift` to match your VPN server parameters.
+In order to test connectivity in your own environment, modify the file `Demo/Demo/Configuration.swift` to match your VPN server parameters.
 
 Example:
 
@@ -137,7 +125,7 @@ enter the root directory of the repository and run:
 
 The generated output is stored into the `docs` directory in HTML format.
 
-### Core
+### TunnelKitCore
 
 Contains the building blocks of a VPN protocol. Eventually, a consumer would implement the `Session` interface, expected to start and control the VPN session. A session is expected to work with generic network interfaces:
 
@@ -146,32 +134,34 @@ Contains the building blocks of a VPN protocol. Eventually, a consumer would imp
 
 There are no physical network implementations (e.g. UDP or TCP) in this module.
 
-### AppExtension
+### TunnelKitAppExtension
 
 Provides a layer on top of the NetworkExtension framework. Most importantly, bridges native [NWUDPSession][ne-udp] and [NWTCPConnection][ne-tcp] to an abstract `GenericSocket` interface, thus making a multi-protocol VPN dramatically easier to manage.
 
-### Manager
+### TunnelKitManager
 
-This subspec includes convenient classes to control the VPN tunnel from your app without the NetworkExtension headaches. Have a look at `VPNProvider` implementations:
+This component includes convenient classes to control the VPN tunnel from your app without the NetworkExtension headaches. Have a look at `VPNProvider` implementations:
 
 - `MockVPNProvider` (default, useful to test on simulator)
-- `OpenVPNProvider`
+- `NetworkExtensionVPNProvider` (for IPSec/IKEv2)
 
-Set `VPN.shared` to either of them at app launch time.
+### TunnelKitIKE
 
-### Protocols/OpenVPN
+Here you find `NativeProvider`, a generic way to manage a VPN profile based on the native IPSec/IKEv2 protocols. Just wrap a `NEVPNProtocolIPSec` or `NEVPNProtocolIKEv2` object in a `NetworkExtensionVPNConfiguration` and use it to install or connect to the VPN.
 
-Here you will find the low-level entities on top of which an OpenVPN connection is established. Code is mixed Swift and Obj-C, most of it is not exposed to consumers. The module depends on OpenSSL.
+### TunnelKitOpenVPN
+
+Here are the low-level entities on top of which an OpenVPN connection is established. Code is mixed Swift and Obj-C, most of it is not exposed to consumers. The module depends on OpenSSL.
 
 The entry point is the `OpenVPNSession` class. The networking layer is fully abstract and delegated externally with the use of opaque `IOInterface` (`LinkInterface` and `TunnelInterface`) and `OpenVPNSessionDelegate` protocols.
 
-Another goal of this module is packaging up a black box implementation of a [NEPacketTunnelProvider][ne-ptp], which is the essential part of a Packet Tunnel Provider app extension. You will find the main implementation in the `OpenVPNTunnelProvider` class.
+Another goal of this module is packaging up a black box implementation of a [NEPacketTunnelProvider][ne-ptp], which is the essential part of a Packet Tunnel Provider app extension. You will find the main implementation in the `OpenVPNTunnelProvider` class. On the client side, you manage the VPN profile with the `OpenVPNProvider` class, which is a specific implementation of `NetworkExtensionVPNProvider`.
 
 A debug log snapshot is optionally maintained and shared by the tunnel provider to host apps via the App Group container.
 
-### Extra/LZO
+### TunnelKitLZO
 
-Due to the restrictive license (GPLv2), LZO support is provided as an optional subspec.
+Due to the restrictive license (GPLv2), LZO support is provided as an optional component.
 
 ## License
 
@@ -201,8 +191,9 @@ For more details please see [CONTRIBUTING][contrib-readme].
 
 - [lzo][dep-lzo-website] - Copyright (c) 1996-2017 Markus F.X.J. Oberhumer
 - [PIATunnel][dep-piatunnel-repo] - Copyright (c) 2018-Present Private Internet Access
-- [SURFnet][surfnet]
+- [SURFnet][ppl-surfnet]
 - [SwiftyBeaver][dep-swiftybeaver-repo] - Copyright (c) 2015 Sebastian Kreutzberger
+- [XMB5][ppl-xmb5] for the [XOR patch][ppl-xmb5-xor] - Copyright (c) 2020 Sam Foxman
 
 This product includes software developed by the OpenSSL Project for use in the OpenSSL Toolkit. ([https://www.openssl.org/][dep-openssl])
 
@@ -216,11 +207,9 @@ Website: [passepartoutvpn.app][about-website]
 
 [openvpn]: https://openvpn.net/index.php/open-source/overview.html
 
-[dep-cocoapods]: https://guides.cocoapods.org/using/getting-started.html
 [dep-jazzy]: https://github.com/realm/jazzy
 [dep-brew]: https://brew.sh/
 [dep-openssl]: https://www.openssl.org/
-[issue-51]: https://github.com/passepartoutvpn/tunnelkit/issues/51
 
 [ne-home]: https://developer.apple.com/documentation/networkextension
 [ne-ptp]: https://developer.apple.com/documentation/networkextension/nepackettunnelprovider
@@ -236,7 +225,10 @@ Website: [passepartoutvpn.app][about-website]
 [dep-piatunnel-repo]: https://github.com/pia-foss/tunnel-apple
 [dep-swiftybeaver-repo]: https://github.com/SwiftyBeaver/SwiftyBeaver
 [dep-lzo-website]: http://www.oberhumer.com/opensource/lzo/
-[surfnet]: https://www.surf.nl/en/about-surf/subsidiaries/surfnet
+[ppl-surfnet]: https://www.surf.nl/en/about-surf/subsidiaries/surfnet
+[ppl-xmb5]: https://github.com/XMB5
+[ppl-xmb5-xor]: https://github.com/passepartoutvpn/tunnelkit/pull/170
+[about-tunnelblick-xor]: https://tunnelblick.net/cOpenvpn_xorpatch.html
 
 [about-twitter]: https://twitter.com/keeshux
 [about-website]: https://passepartoutvpn.app
