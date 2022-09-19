@@ -5,12 +5,66 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 4.0.0 (2021-11-05)
+
+### Changed
+
+- Migrate to SwiftPM. [#210](https://github.com/passepartoutvpn/tunnelkit/issues/210)
+
+## 3.5.0 (2021-10-18)
+
+### Added
+
+- Support for IPSec/IKEv2 providers.
+
+### Changed
+
+- Avoid caching PEMs on disk (roop). [#213](https://github.com/passepartoutvpn/tunnelkit/pull/213)
+- Upgrade OpenSSL to 1.1.1l.
+
+## 3.4.0 (2021-08-07)
+
+### Added
+
+- Support for XOR patch (Sam Foxman). [#170](https://github.com/passepartoutvpn/tunnelkit/pull/170)
+
+## 3.3.3 (2021-07-19)
+
+### Added
+
+- Support for `--compress stub-v2`.
+
+### Fixed
+
+- Return error in install completion handler. [#206](https://github.com/passepartoutvpn/tunnelkit/issues/206)
+- Relax handling of whitespaces in configuration file.
+
+## 3.3.2 (2021-06-26)
+
+### Fixed
+
+- Clean up cached PEMs at the end of a Session. [#203](https://github.com/passepartoutvpn/tunnelkit/pull/203)
+
+## 3.3.1 (2021-02-12)
+
+### Changed
+
+- Skip keychain password prompt on macOS. [#200](https://github.com/passepartoutvpn/tunnelkit/pull/200)
+
+### Fixed
+
+- Restore app group in keychain queries about password references. [#201](https://github.com/passepartoutvpn/tunnelkit/pull/201)
+
+## 3.3.0 (2021-01-28)
 
 ### Added
 
 - Handle `--data-ciphers` and `data-ciphers-fallback` from OpenVPN 2.5
 - Support DNS over HTTPS (DoH) and TLS (DoT).
+
+### Changed
+
+- Pick tunnel password reference from an existing keychain item context.
 
 ### Fixed
 
