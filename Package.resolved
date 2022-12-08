@@ -3,7 +3,7 @@
     "pins": [
       {
         "package": "openssl-apple",
-        "repositoryURL": "https://github.com/keeshux/openssl-apple",
+        "repositoryURL": "https://github.com/passepartoutvpn/openssl-apple",
         "state": {
           "branch": null,
           "revision": "42a049c406c1aa3df11a8dd14b1b11cd470f4a00",

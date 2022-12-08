@@ -23,7 +23,7 @@
 //  along with TunnelKit.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-import TunnelKitOpenVPN
+import TunnelKitOpenVPNAppExtension
 
 class PacketTunnelProvider: OpenVPNTunnelProvider {
 }

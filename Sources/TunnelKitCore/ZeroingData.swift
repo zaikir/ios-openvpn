@@ -35,7 +35,7 @@
 //
 
 import Foundation
-import _TunnelKitCoreObjC
+import CTunnelKitCore
 
 public func Z() -> ZeroingData {
     return ZeroingData()

@@ -30,7 +30,6 @@ import TunnelKitManager
 public class NativeProvider: VPNProvider {
     private let provider: NetworkExtensionVPNProvider
     
-    /// :nodoc:
     public init() {
         provider = NetworkExtensionVPNProvider(locator: NetworkExtensionNativeLocator())
     }
@@ -65,8 +64,8 @@ public class NativeProvider: VPNProvider {
         provider.disconnect(completionHandler: completionHandler)
     }
     
-    public func reconnect(configuration: VPNConfiguration, completionHandler: ((Error?) -> Void)?) {
-        provider.reconnect(configuration: configuration, completionHandler: completionHandler)
+    public func reconnect(configuration: VPNConfiguration, delay: Double? = nil, completionHandler: ((Error?) -> Void)?) {
+        provider.reconnect(configuration: configuration, delay: delay, completionHandler: completionHandler)
     }
     
     public func uninstall(completionHandler: (() -> Void)?) {
