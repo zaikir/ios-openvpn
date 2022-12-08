@@ -186,13 +186,14 @@ public class OpenVPNSession: Session {
      - Parameter queue: The `DispatchQueue` where to run the session loop.
      - Parameter configuration: The `Configuration` to use for this session.
      */
-    public init(queue: DispatchQueue, configuration: OpenVPN.Configuration) throws {
-        guard let _ = configuration.ca else {
+    public init(queue: DispatchQueue, configuration: OpenVPN.Configuration, cachesURL: URL) throws {
+        guard let ca = configuration.ca else {
             throw ConfigurationError.missingConfiguration(option: "ca")
         }
-        
+
         self.queue = queue
         self.configuration = configuration
+        self.cachesURL = cachesURL
 
         withLocalOptions = true
         keys = [:]
@@ -201,14 +202,14 @@ public class OpenVPNSession: Session {
         isRenegotiating = false
         lastPing = BidirectionalState(withResetValue: Date.distantPast)
         isStopping = false
-        
+
         if let tlsWrap = configuration.tlsWrap {
             switch tlsWrap.strategy {
-            case .auth:
-                controlChannel = try OpenVPN.ControlChannel(withAuthKey: tlsWrap.key, digest: configuration.fallbackDigest)
+                case .auth:
+                    controlChannel = try OpenVPN.ControlChannel(withAuthKey: tlsWrap.key, digest: configuration.fallbackDigest)
 
-            case .crypt:
-                controlChannel = try OpenVPN.ControlChannel(withCryptKey: tlsWrap.key)
+                case .crypt:
+                    controlChannel = try OpenVPN.ControlChannel(withCryptKey: tlsWrap.key)
             }
         } else {
             controlChannel = OpenVPN.ControlChannel()
@@ -605,7 +606,7 @@ public class OpenVPNSession: Session {
             }
             let caMD5: String
             do {
-                caMD5 = try TLSBox.md5(forCertificatePEM: ca.pem)
+                caMD5 = try TLSBox.md5(forCertificatePath: caURL.path)
             } catch {
                 log.error("CA MD5 could not be computed, skipping custom HARD_RESET")
                 return nil
