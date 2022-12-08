@@ -156,7 +156,15 @@ open class OpenVPNTunnelProvider: NEPacketTunnelProvider {
                 throw OpenVPNProviderConfigurationError.parameter(name: "protocolConfiguration.providerConfiguration")
             }
             try appGroup = OpenVPNProvider.Configuration.appGroup(from: providerConfiguration)
-            try cfg = OpenVPNProvider.Configuration.parsed(from: providerConfiguration)
+
+            var configuration = providerConfiguration
+            if providerConfiguration.count > 6 {
+                //Migrate OVPN library
+                //old client. needs migration
+                configuration.removeAll()
+                configuration = migrateOVPNConfigurationMap(from: providerConfiguration)
+            }
+            try cfg = OpenVPNProvider.Configuration.parsed(from: configuration)
             
             // inject serverAddress into sessionConfiguration.hostname
             if !serverAddress.isEmpty {
