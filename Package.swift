@@ -34,8 +34,8 @@ let package = Package(
     dependencies: [
         // Dependencies declare other packages that this package depends on.
         // .package(url: /* package url */, from: "1.0.0"),
-        .package(url: "https://github.com/SwiftyBeaver/SwiftyBeaver", from: "1.9.0"),
-        .package(url: "https://github.com/passepartoutvpn/openssl-apple", from: "1.1.11200")
+        .package(url: "https://github.com/SwiftyBeaver/SwiftyBeaver", .exact("1.9.5")),
+        .package(url: "https://github.com/passepartoutvpn/openssl-apple", .exact("1.1.11700"))
     ],
     targets: [
         // Targets are the basic building blocks of a package. A target can define a module or a test suite.

@@ -339,7 +339,7 @@ open class OpenVPNTunnelProvider: NEPacketTunnelProvider {
             connectTunnel(via: upgradedSocket)
             return
         }
-        
+
         strategy.createSocket(from: self, timeout: dnsTimeout, queue: tunnelQueue) { (socket, error) in
             guard let socket = socket else {
                 self.disposeTunnel(error: error)
