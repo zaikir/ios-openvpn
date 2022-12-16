@@ -6,17 +6,13 @@ import PackageDescription
 let package = Package(
     name: "TunnelKit",
     platforms: [
-        .macOS(.v10_15), .iOS(.v12)
+        .iOS(.v11), .macOS(.v10_15)
     ],
     products: [
         // Products define the executables and libraries a package produces, and make them visible to other packages.
         .library(
             name: "TunnelKit",
-            targets: [
-                "TunnelKitCore",
-                "TunnelKitAppExtension",
-                "TunnelKitManager"
-            ]
+            targets: ["TunnelKit"]
         ),
         .library(
             name: "TunnelKitIKE",
@@ -27,6 +23,10 @@ let package = Package(
             targets: ["TunnelKitOpenVPN"]
         ),
         .library(
+            name: "TunnelKitOpenVPNAppExtension",
+            targets: ["TunnelKitOpenVPNAppExtension"]
+        ),
+        .library(
             name: "TunnelKitLZO",
             targets: ["TunnelKitLZO"]
         )
@@ -35,46 +35,74 @@ let package = Package(
         // Dependencies declare other packages that this package depends on.
         // .package(url: /* package url */, from: "1.0.0"),
         .package(url: "https://github.com/SwiftyBeaver/SwiftyBeaver", .exact("1.9.5")),
-        .package(url: "https://github.com/keeshux/openssl-apple", .exact("1.1.11200"))
+        .package(url: "https://github.com/passepartoutvpn/openssl-apple", .exact("1.1.11700"))
     ],
     targets: [
         // Targets are the basic building blocks of a package. A target can define a module or a test suite.
         // Targets can depend on other targets in this package, and on products in packages this package depends on.
         .target(
-            name: "TunnelKitCore",
-            dependencies: [
-                "_TunnelKitUtils",
-                "_TunnelKitCoreObjC",
-                "SwiftyBeaver"]),
-        .target(
-            name: "_TunnelKitCoreObjC",
-            dependencies: []),
-        .target(
-            name: "TunnelKitAppExtension",
+            name: "TunnelKit",
             dependencies: [
                 "TunnelKitCore",
-                "SwiftyBeaver"]),
+                "TunnelKitManager"
+            ]
+        ),
+        .target(
+            name: "TunnelKitCore",
+            dependencies: [
+                "__TunnelKitUtils",
+                "CTunnelKitCore",
+                "SwiftyBeaver"
+            ]),
         .target(
             name: "TunnelKitManager",
             dependencies: [
-                "TunnelKitCore"]),
+                "SwiftyBeaver"
+            ]),
+        .target(
+            name: "TunnelKitAppExtension",
+            dependencies: [
+                "TunnelKitCore"
+            ]),
         .target(
             name: "TunnelKitIKE",
             dependencies: [
-                "TunnelKitCore",
-                "TunnelKitManager"]),
+                "TunnelKitManager"
+            ]),
         .target(
             name: "TunnelKitOpenVPN",
             dependencies: [
-                "TunnelKitCore",
-                "_TunnelKitOpenVPNObjC",
-                "TunnelKitAppExtension",
-                "TunnelKitManager"]),
+                "TunnelKitOpenVPNCore",
+                "TunnelKitOpenVPNManager"
+            ]),
+        //
         .target(
-            name: "_TunnelKitOpenVPNObjC",
+            name: "TunnelKitOpenVPNCore",
             dependencies: [
-                "openssl-apple",
-                "_TunnelKitCoreObjC"]),
+                "TunnelKitCore",
+                "CTunnelKitOpenVPNCore",
+                "CTunnelKitOpenVPNProtocol" // FIXME: remove dependency on TLSBox
+            ]),
+        .target(
+            name: "TunnelKitOpenVPNManager",
+            dependencies: [
+                "TunnelKitManager",
+                "TunnelKitOpenVPNCore"
+            ]),
+        .target(
+            name: "TunnelKitOpenVPNProtocol",
+            dependencies: [
+                "TunnelKitOpenVPNCore",
+                "CTunnelKitOpenVPNProtocol"
+            ]),
+        .target(
+            name: "TunnelKitOpenVPNAppExtension",
+            dependencies: [
+                "TunnelKitAppExtension",
+                "TunnelKitOpenVPNCore",
+                "TunnelKitOpenVPNManager",
+                "TunnelKitOpenVPNProtocol"
+            ]),
         .target(
             name: "TunnelKitLZO",
             dependencies: [],
@@ -84,9 +112,24 @@ let package = Package(
                 "lib/README.LZO",
                 "lib/testmini.c"
             ]),
+        //
         .target(
-            name: "_TunnelKitUtils",
+            name: "CTunnelKitCore",
             dependencies: []),
+        .target(
+            name: "CTunnelKitOpenVPNCore",
+            dependencies: []),
+        .target(
+            name: "CTunnelKitOpenVPNProtocol",
+            dependencies: [
+                "CTunnelKitCore",
+                "CTunnelKitOpenVPNCore",
+                "openssl-apple"
+            ]),
+        .target(
+            name: "__TunnelKitUtils",
+            dependencies: []),
+        //
         .testTarget(
             name: "TunnelKitCoreTests",
             dependencies: [
@@ -95,7 +138,8 @@ let package = Package(
         .testTarget(
             name: "TunnelKitOpenVPNTests",
             dependencies: [
-                "TunnelKitOpenVPN",
+                "TunnelKitOpenVPNCore",
+                "TunnelKitOpenVPNAppExtension",
                 "TunnelKitLZO"
             ],
             resources: [

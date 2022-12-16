@@ -36,8 +36,8 @@
 
 import XCTest
 @testable import TunnelKitCore
-import _TunnelKitCoreObjC
-import _TunnelKitOpenVPNObjC
+import CTunnelKitCore
+import CTunnelKitOpenVPNProtocol
 
 class EncryptionPerformanceTests: XCTestCase {
     private var cbcEncrypter: Encrypter!

@@ -36,15 +36,13 @@
 
 import Foundation
 import Security.SecRandom
-import _TunnelKitCoreObjC
-import _TunnelKitUtils
+import CTunnelKitCore
+import __TunnelKitUtils
 
-/// :nodoc:
 public enum SecureRandomError: Error {
     case randomGenerator
 }
 
-/// :nodoc:
 public class SecureRandom {
     @available(*, deprecated)
     static func uint32FromBuffer() throws -> UInt32 {
