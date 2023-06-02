@@ -51,6 +51,7 @@ const NSInteger CryptoCBCMaxHMACLength = 100;
 
 @property (nonatomic, unsafe_unretained) const EVP_CIPHER *cipher;
 @property (nonatomic, unsafe_unretained) const EVP_MD *digest;
+@property (nonatomic, unsafe_unretained) const NSString *digestName;
 @property (nonatomic, assign) int cipherKeyLength;
 @property (nonatomic, assign) int cipherIVLength;
 @property (nonatomic, assign) int hmacKeyLength;
@@ -58,8 +59,10 @@ const NSInteger CryptoCBCMaxHMACLength = 100;
 
 @property (nonatomic, unsafe_unretained) EVP_CIPHER_CTX *cipherCtxEnc;
 @property (nonatomic, unsafe_unretained) EVP_CIPHER_CTX *cipherCtxDec;
-@property (nonatomic, unsafe_unretained) HMAC_CTX *hmacCtxEnc;
-@property (nonatomic, unsafe_unretained) HMAC_CTX *hmacCtxDec;
+@property (nonatomic, unsafe_unretained) EVP_MAC *macEnc;
+@property (nonatomic, unsafe_unretained) EVP_MAC *macDec;
+@property (nonatomic, unsafe_unretained) EVP_MAC_CTX *macCtxEnc;
+@property (nonatomic, unsafe_unretained) EVP_MAC_CTX *macCtxDec;
 @property (nonatomic, unsafe_unretained) uint8_t *bufferDecHMAC;
 
 @end
@@ -77,6 +80,7 @@ const NSInteger CryptoCBCMaxHMACLength = 100;
             self.cipher = EVP_get_cipherbyname([cipherName cStringUsingEncoding:NSASCIIStringEncoding]);
             NSAssert(self.cipher, @"Unknown cipher '%@'", cipherName);
         }
+        self.digestName = digestName;
         self.digest = EVP_get_digestbyname([digestName cStringUsingEncoding:NSASCIIStringEncoding]);
         NSAssert(self.digest, @"Unknown digest '%@'", digestName);
 
@@ -92,8 +96,10 @@ const NSInteger CryptoCBCMaxHMACLength = 100;
             self.cipherCtxEnc = EVP_CIPHER_CTX_new();
             self.cipherCtxDec = EVP_CIPHER_CTX_new();
         }
-        self.hmacCtxEnc = HMAC_CTX_new();
-        self.hmacCtxDec = HMAC_CTX_new();
+        self.macEnc = EVP_MAC_fetch(NULL, "HMAC", NULL);
+        self.macDec = EVP_MAC_fetch(NULL, "HMAC", NULL);
+        self.macCtxEnc = EVP_MAC_CTX_new(self.macEnc);
+        self.macCtxDec = EVP_MAC_CTX_new(self.macDec);
         self.bufferDecHMAC = allocate_safely(CryptoCBCMaxHMACLength);
     }
     return self;
@@ -105,8 +111,10 @@ const NSInteger CryptoCBCMaxHMACLength = 100;
         EVP_CIPHER_CTX_free(self.cipherCtxEnc);
         EVP_CIPHER_CTX_free(self.cipherCtxDec);
     }
-    HMAC_CTX_free(self.hmacCtxEnc);
-    HMAC_CTX_free(self.hmacCtxDec);
+    EVP_MAC_free(self.macEnc);
+    EVP_MAC_free(self.macDec);
+    EVP_MAC_CTX_free(self.macCtxEnc);
+    EVP_MAC_CTX_free(self.macCtxDec);
     bzero(self.bufferDecHMAC, CryptoCBCMaxHMACLength);
     free(self.bufferDecHMAC);
     
@@ -138,8 +146,10 @@ const NSInteger CryptoCBCMaxHMACLength = 100;
         EVP_CipherInit(self.cipherCtxEnc, self.cipher, cipherKey.bytes, NULL, 1);
     }
 
-    HMAC_CTX_reset(self.hmacCtxEnc);
-    HMAC_Init_ex(self.hmacCtxEnc, hmacKey.bytes, self.hmacKeyLength, self.digest, NULL);
+    OSSL_PARAM params[2];
+    params[0] = OSSL_PARAM_construct_utf8_string("digest", (char *)[self.digestName cStringUsingEncoding:NSASCIIStringEncoding], 0);
+    params[1] = OSSL_PARAM_construct_end();
+    EVP_MAC_init(self.macCtxEnc, (unsigned char *)hmacKey.bytes, (size_t)self.hmacKeyLength, params);
 }
 
 - (BOOL)encryptBytes:(const uint8_t *)bytes length:(NSInteger)length dest:(uint8_t *)dest destLength:(NSInteger *)destLength flags:(const CryptoFlags * _Nullable)flags error:(NSError * _Nullable __autoreleasing * _Nullable)error
@@ -147,7 +157,7 @@ const NSInteger CryptoCBCMaxHMACLength = 100;
     uint8_t *outIV = dest + self.digestLength;
     uint8_t *outEncrypted = dest + self.digestLength + self.cipherIVLength;
     int l1 = 0, l2 = 0;
-    unsigned int l3 = 0;
+    size_t l3 = 0;
     int code = 1;
 
     if (self.cipher) {
@@ -168,10 +178,10 @@ const NSInteger CryptoCBCMaxHMACLength = 100;
         memcpy(outEncrypted, bytes, length);
         l1 = (int)length;
     }
-    
-    TUNNEL_CRYPTO_TRACK_STATUS(code) HMAC_Init_ex(self.hmacCtxEnc, NULL, 0, NULL, NULL);
-    TUNNEL_CRYPTO_TRACK_STATUS(code) HMAC_Update(self.hmacCtxEnc, outIV, l1 + l2 + self.cipherIVLength);
-    TUNNEL_CRYPTO_TRACK_STATUS(code) HMAC_Final(self.hmacCtxEnc, dest, &l3);
+
+    TUNNEL_CRYPTO_TRACK_STATUS(code) EVP_MAC_init(self.macCtxEnc, NULL, 0, NULL);
+    TUNNEL_CRYPTO_TRACK_STATUS(code) EVP_MAC_update(self.macCtxEnc, outIV, l1 + l2 + self.cipherIVLength);
+    TUNNEL_CRYPTO_TRACK_STATUS(code) EVP_MAC_final(self.macCtxEnc, dest, &l3, (size_t)destLength);
     
     *destLength = l1 + l2 + self.cipherIVLength + self.digestLength;
     
@@ -196,9 +206,11 @@ const NSInteger CryptoCBCMaxHMACLength = 100;
         EVP_CIPHER_CTX_reset(self.cipherCtxDec);
         EVP_CipherInit(self.cipherCtxDec, self.cipher, cipherKey.bytes, NULL, 0);
     }
-    
-    HMAC_CTX_reset(self.hmacCtxDec);
-    HMAC_Init_ex(self.hmacCtxDec, hmacKey.bytes, self.hmacKeyLength, self.digest, NULL);
+
+    OSSL_PARAM params[2];
+    params[0] = OSSL_PARAM_construct_utf8_string("digest", (char *)[self.digestName cStringUsingEncoding:NSASCIIStringEncoding], 0);
+    params[1] = OSSL_PARAM_construct_end();
+    EVP_MAC_init(self.macCtxDec, hmacKey.bytes, self.hmacKeyLength, params);
 }
 
 - (BOOL)decryptBytes:(const uint8_t *)bytes length:(NSInteger)length dest:(uint8_t *)dest destLength:(NSInteger *)destLength flags:(const CryptoFlags * _Nullable)flags error:(NSError * _Nullable __autoreleasing * _Nullable)error
@@ -208,11 +220,12 @@ const NSInteger CryptoCBCMaxHMACLength = 100;
     const uint8_t *iv = bytes + self.digestLength;
     const uint8_t *encrypted = bytes + self.digestLength + self.cipherIVLength;
     int l1 = 0, l2 = 0;
+    size_t l3 = 0;
     int code = 1;
-    
-    TUNNEL_CRYPTO_TRACK_STATUS(code) HMAC_Init_ex(self.hmacCtxDec, NULL, 0, NULL, NULL);
-    TUNNEL_CRYPTO_TRACK_STATUS(code) HMAC_Update(self.hmacCtxDec, bytes + self.digestLength, length - self.digestLength);
-    TUNNEL_CRYPTO_TRACK_STATUS(code) HMAC_Final(self.hmacCtxDec, self.bufferDecHMAC, (unsigned *)&l1);
+
+    TUNNEL_CRYPTO_TRACK_STATUS(code) EVP_MAC_init(self.macCtxDec, NULL, 0, NULL);
+    TUNNEL_CRYPTO_TRACK_STATUS(code) EVP_MAC_update(self.macCtxDec, bytes + self.digestLength, length - self.digestLength);
+    TUNNEL_CRYPTO_TRACK_STATUS(code) EVP_MAC_final(self.macCtxDec, self.bufferDecHMAC, &l3, sizeof(self.bufferDecHMAC));
     
     if (TUNNEL_CRYPTO_SUCCESS(code) && CRYPTO_memcmp(self.bufferDecHMAC, bytes, self.digestLength) != 0) {
         if (error) {
@@ -232,12 +245,12 @@ const NSInteger CryptoCBCMaxHMACLength = 100;
 
 - (BOOL)verifyBytes:(const uint8_t *)bytes length:(NSInteger)length flags:(const CryptoFlags * _Nullable)flags error:(NSError * _Nullable __autoreleasing * _Nullable)error
 {
-    int l1 = 0;
+    size_t l1 = 0;
     int code = 1;
-    
-    TUNNEL_CRYPTO_TRACK_STATUS(code) HMAC_Init_ex(self.hmacCtxDec, NULL, 0, NULL, NULL);
-    TUNNEL_CRYPTO_TRACK_STATUS(code) HMAC_Update(self.hmacCtxDec, bytes + self.digestLength, length - self.digestLength);
-    TUNNEL_CRYPTO_TRACK_STATUS(code) HMAC_Final(self.hmacCtxDec, self.bufferDecHMAC, (unsigned *)&l1);
+
+    TUNNEL_CRYPTO_TRACK_STATUS(code) EVP_MAC_init(self.macCtxDec, NULL, 0, NULL);
+    TUNNEL_CRYPTO_TRACK_STATUS(code) EVP_MAC_update(self.macCtxDec, bytes + self.digestLength, length - self.digestLength);
+    TUNNEL_CRYPTO_TRACK_STATUS(code) EVP_MAC_final(self.macCtxDec, self.bufferDecHMAC, &l1, sizeof(self.bufferDecHMAC));
     
     if (TUNNEL_CRYPTO_SUCCESS(code) && CRYPTO_memcmp(self.bufferDecHMAC, bytes, self.digestLength) != 0) {
         if (error) {

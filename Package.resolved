@@ -3,11 +3,11 @@
     "pins": [
       {
         "package": "openssl-apple",
-        "repositoryURL": "https://github.com/passepartoutvpn/openssl-apple",
+        "repositoryURL": "git@github.com:xvpn/cpz_pia-mobile_ios_pia-openssl-apple.git",
         "state": {
           "branch": null,
-          "revision": "757c074af45e4f2514fe63f649ccdde966183e90",
-          "version": "1.1.11700"
+          "revision": "0acf96cf5aed047e2306876dda6f5586408b1321",
+          "version": null
         }
       },
       {

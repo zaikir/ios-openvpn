@@ -166,15 +166,20 @@
     NSParameterAssert(secret);
     NSParameterAssert(data);
     
-    unsigned int l = 0;
+    size_t l = 0;
     int code = 1;
 
-    HMAC_CTX *ctx = HMAC_CTX_new();
-    TUNNEL_CRYPTO_TRACK_STATUS(code) HMAC_CTX_reset(ctx);
-    TUNNEL_CRYPTO_TRACK_STATUS(code) HMAC_Init_ex(ctx, secret, (int)secretLength, EVP_get_digestbyname([digestName cStringUsingEncoding:NSASCIIStringEncoding]), NULL);
-    TUNNEL_CRYPTO_TRACK_STATUS(code) HMAC_Update(ctx, data, dataLength);
-    TUNNEL_CRYPTO_TRACK_STATUS(code) HMAC_Final(ctx, hmac, &l);
-    HMAC_CTX_free(ctx);
+    EVP_MAC *mac = EVP_MAC_fetch(NULL, "HMAC", NULL);
+    EVP_MAC_CTX *mac_ctx = EVP_MAC_CTX_new(mac);
+    OSSL_PARAM params[2];
+    params[0] = OSSL_PARAM_construct_utf8_string("digest", (char *)[digestName cStringUsingEncoding:NSASCIIStringEncoding], 0);
+    params[1] = OSSL_PARAM_construct_end();
+
+    TUNNEL_CRYPTO_TRACK_STATUS(code) EVP_MAC_init(mac_ctx, (unsigned char *)secret, (size_t)secretLength, params);
+    TUNNEL_CRYPTO_TRACK_STATUS(code) EVP_MAC_update(mac_ctx, data, (size_t)dataLength);
+    TUNNEL_CRYPTO_TRACK_STATUS(code) EVP_MAC_final(mac_ctx, hmac, &l, (size_t)hmacLength);
+    EVP_MAC_free(mac);
+    EVP_MAC_CTX_free(mac_ctx);
     
     *hmacLength = l;
 
