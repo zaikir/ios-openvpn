@@ -3,10 +3,10 @@
     "pins": [
       {
         "package": "openssl-apple",
-        "repositoryURL": "git@github.com:xvpn/cpz_pia-mobile_ios_pia-openssl-apple.git",
+        "repositoryURL": "git@github.com:pia-foss/ios-openssl.git",
         "state": {
-          "branch": null,
-          "revision": "0acf96cf5aed047e2306876dda6f5586408b1321",
+          "branch": "main",
+          "revision": "8895baef87867f2a2b8a33578d6c634a14b12a9a",
           "version": null
         }
       },

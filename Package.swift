@@ -35,7 +35,7 @@ let package = Package(
         // Dependencies declare other packages that this package depends on.
         // .package(url: /* package url */, from: "1.0.0"),
         .package(url: "https://github.com/SwiftyBeaver/SwiftyBeaver", .exact("1.9.5")),
-        .package(url: "git@github.com:xvpn/cpz_pia-mobile_ios_pia-openssl-apple.git", revision: "0acf96cf5aed047e2306876dda6f5586408b1321")
+        .package(url: "git@github.com:pia-foss/ios-openssl.git", branch: "main")
     ],
     targets: [
         // Targets are the basic building blocks of a package. A target can define a module or a test suite.
@@ -124,7 +124,7 @@ let package = Package(
             dependencies: [
                 "CTunnelKitCore",
                 "CTunnelKitOpenVPNCore",
-                .product(name: "openssl-apple", package: "cpz_pia-mobile_ios_pia-openssl-apple"),
+                .product(name: "openssl-apple", package: "ios-openssl"),
             ]),
         .target(
             name: "__TunnelKitUtils",
